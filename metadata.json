@@ -1,0 +1,6 @@
+{
+  "name": "LiBRĒ StYLĒ Invitation Studio",
+  "description": "Create, customize, preview, and export breathtaking interactive digital invitations complete with music, countdown timers, RSVP tracking, photo galleries, and AI-powered wording.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
