@@ -103,6 +103,7 @@ interface Config {
   format: '916' | 'responsive';
   cover: 'envelope' | 'curtain' | 'gate' | 'none';
   gateway: string;
+  guestName?: string;
   coverText: string;
   coverBg: string;
   coverAccent: string;
@@ -952,9 +953,9 @@ export default function App() {
     printWindow.document.close();
   };
 
-  const downloadHtml = (editable: boolean) => {
-    const configJson = JSON.stringify(config);
-    const htmlContent = `<!DOCTYPE html>
+  const buildHtml = (guestName?: string): string => {
+    const configJson = JSON.stringify({ ...config, guestName: guestName || '' });
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1105,6 +1106,7 @@ function App() {
           title={config.title}
           tagline={config.tagline}
           dateText={config.dateText}
+          guestName={config.guestName}
           position="fixed"
           onStart={handleOpen}
           onDone={() => setGateDone(true)}
@@ -1232,14 +1234,44 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>`;
+  };
 
+  const downloadHtml = (editable: boolean, guestName?: string) => {
+    const htmlContent = buildHtml(guestName);
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = editable ? 'index.html' : 'lumiere_invitation.html';
+    const slug = guestName ? 'invitation_' + guestName.trim().replace(/[^A-Za-z0-9]+/g, '_') + '.html' : 'lumiere_invitation.html';
+    a.download = editable ? 'index.html' : slug;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Copy the full card code to the clipboard, ready to paste into Google Sites (Insert > Embed > Embed code)
+  const copyHtmlForSites = async (guestName?: string) => {
+    const code = buildHtml(guestName);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(code);
+      ok = true;
+    } catch (e) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e2) { ok = false; }
+    }
+    setSavedStatus(ok
+      ? (guestName ? 'Code for ' + guestName + ' copied ✓ ' : 'Card code copied ✓ ') + 'Now: Google Sites → Insert → Embed → Embed code → paste → Insert. Make the box tall.'
+      : 'Could not copy. Use Download HTML instead.');
+    setTimeout(() => setSavedStatus(null), 7000);
   };
 
   const copyConfigJson = () => {
@@ -2473,6 +2505,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                       </button>
                     </div>
 
+                    <p className="text-[10px] text-slate-500">Each name below gets its own personal card with a "Dear name," greeting. Tap <strong>Copy</strong> to paste it into its own Google Sites page, or <strong>⬇</strong> to download it.</p>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {(config.predefinedGuests || []).map(g => (
                         <div key={g.id} className="bg-white border border-[#ebdcd0] p-2.5 rounded-xl text-xs flex items-center justify-between">
@@ -2480,12 +2513,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                             <div className="font-semibold text-[#bc6c25]">{g.name} <span className="text-[10px] bg-[#faedcd] px-1.5 py-0.5 rounded text-slate-700 ml-1">{g.relationship}</span></div>
                             <div className="text-[10px] text-slate-500">{g.contact}</div>
                           </div>
-                          <button
-                            onClick={() => setConfig({ ...config, predefinedGuests: config.predefinedGuests.filter(item => item.id !== g.id) })}
-                            className="text-rose-500 hover:text-rose-700 text-xs"
-                          >
-                            ✕
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button onClick={() => copyHtmlForSites(g.name)} className="px-2 py-1 text-[10px] font-bold text-white bg-[#4285f4] rounded" title="Copy Google Sites code for this guest">Copy</button>
+                            <button onClick={() => downloadHtml(false, g.name)} className="px-2 py-1 text-[10px] font-bold text-[#bc6c25] bg-white border border-[#d4a373] rounded" title="Download HTML for this guest">⬇</button>
+                            <button
+                              onClick={() => setConfig({ ...config, predefinedGuests: config.predefinedGuests.filter(item => item.id !== g.id) })}
+                              className="text-rose-500 hover:text-rose-700 text-xs px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2526,6 +2563,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                           <Download className="w-3 h-3 text-[#bc6c25]" /> Editable File
                         </button>
                       </div>
+                      <button
+                        onClick={() => copyHtmlForSites()}
+                        className="w-full py-2.5 px-4 bg-[#4285f4] hover:bg-[#3367d6] text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+                      >
+                        <Copy className="w-4 h-4" /> Copy Google Sites code
+                      </button>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        In Google Sites: <strong>Insert → Embed → Embed code</strong>, paste, tap <strong>Next</strong> then <strong>Insert</strong>. Stretch the box to full width and about a full phone-screen tall.
+                      </p>
                     </div>
                   </div>
 
@@ -3137,6 +3183,7 @@ function LiveInvitationRenderer({
           title={initialConfig.title}
           tagline={initialConfig.tagline}
           dateText={initialConfig.dateText}
+          guestName={initialConfig.guestName}
           position="absolute"
           onStart={() => {
             setGate('opening');
