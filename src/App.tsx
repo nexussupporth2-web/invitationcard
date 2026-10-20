@@ -5,6 +5,18 @@ import {
   MapPin, Clock, Heart, Gift, Phone, Globe, ChevronRight, ChevronDown, X, Plus, Trash2, Sliders, Volume2, VolumeX, Layers, Type, ShieldCheck, Save, Upload, ArrowUp, ArrowDown, Send, Mail, MessageSquare, Hash, Server, MoreVertical, RefreshCw, Lock, Unlock
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import GatewayScene, { GW_EFFECTS } from './Gateway';
+import RsvpCard, { RSVP_DEFAULT } from './RsvpForm';
+// @ts-ignore - raw source of the gateway, embedded into downloaded HTML cards
+import GW_RAW from './Gateway.tsx?raw';
+// @ts-ignore
+import RSVP_RAW from './RsvpForm.tsx?raw';
+
+const GATEWAY_SOURCE: string = (String(GW_RAW) + '\n' + String(RSVP_RAW))
+  .replace(/^import .*$/gm, '')
+  .replace(/^export default .*$/gm, '')
+  .replace(/^export (const|function) /gm, '$1 ')
+  .replace(/<\/script/gi, '<\\/script');
 
 interface SlideItem {
   id: string;
@@ -35,6 +47,7 @@ interface SlideBlock {
   animTrigger?: 'on-scroll' | 'immediate' | 'after-delay';
   showImage?: boolean;
   showDetails?: boolean;
+  rsvp?: any;
 }
 
 interface CustomFont {
@@ -89,6 +102,7 @@ interface Config {
   editor: boolean;
   format: '916' | 'responsive';
   cover: 'envelope' | 'curtain' | 'gate' | 'none';
+  gateway: string;
   coverText: string;
   coverBg: string;
   coverAccent: string;
@@ -261,24 +275,13 @@ const DEFAULT_BLOCKS: SlideBlock[] = [
     animTrigger: 'on-scroll'
   },
   {
-    id: 'b7',
-    type: 'blessings_wall',
-    heading: 'Guest Blessings Wall',
-    imageSize: 'medium',
-    detailsHeading: 'Leave Your Warm Wishes',
-    lines: ['Post your heartfelt blessings in English, Hindi, Punjabi, or any language!'],
-    showSeparator: true,
-    separatorStyle: 'dots',
-    anim: 'fade',
-    animTrigger: 'on-scroll'
-  },
-  {
     id: 'b8',
     type: 'rsvp',
-    heading: 'RSVP Confirmation',
+    heading: 'R.S.V.P.',
     imageSize: 'medium',
-    detailsHeading: 'Please Respond by 15 November 2026',
-    lines: ['Let us know if you can join our celebration. We eagerly await your presence!'],
+    detailsHeading: '',
+    lines: [],
+    rsvp: RSVP_DEFAULT,
     showSeparator: false,
     separatorStyle: 'floral',
     anim: 'bounce',
@@ -290,6 +293,7 @@ const DEFAULT_CONFIG: Config = {
   editor: true,
   format: '916',
   cover: 'envelope',
+  gateway: 'double_gate',
   coverText: 'Tap to open invitation',
   coverBg: '#f4e4d0',
   coverAccent: '#c59b27',
@@ -676,19 +680,20 @@ export default function App() {
       comments: 'Guest Wishes & Blessings',
       slideshow: 'Photo Slideshow Gallery',
       blessings_wall: 'Guest Blessings Wall (भारतीय शुभकामनाएं)',
-      rsvp: 'RSVP',
+      rsvp: 'R.S.V.P.',
       custom: 'Custom Page'
     };
     const newBlock: SlideBlock = {
       id: 'b_' + Date.now(),
       type,
       heading: headings[type] || 'New Page',
-      image: type === 'venue' || type === 'comments' || type === 'slideshow' || type === 'blessings_wall' ? '' : 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&q=80&w=800',
+      image: type === 'venue' || type === 'comments' || type === 'slideshow' || type === 'blessings_wall' || type === 'rsvp' ? '' : 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&q=80&w=800',
       imageSize: 'medium',
-      detailsHeading: type === 'comments' ? 'Leave a Note for the Couple' : type === 'blessings_wall' ? 'Post your blessing in any Indian language' : type === 'slideshow' ? 'Memories in Motion' : 'Event Details',
-      lines: type === 'comments' || type === 'blessings_wall' ? ['Share your warmest wishes below!'] : ['Add detail line 1', 'Add detail line 2'],
+      detailsHeading: type === 'rsvp' ? '' : type === 'comments' ? 'Leave a Note for the Couple' : type === 'blessings_wall' ? 'Post your blessing in any Indian language' : type === 'slideshow' ? 'Memories in Motion' : 'Event Details',
+      lines: type === 'rsvp' ? [] : type === 'comments' || type === 'blessings_wall' ? ['Share your warmest wishes below!'] : ['Add detail line 1', 'Add detail line 2'],
       showSeparator: true,
       separatorStyle: 'floral',
+      rsvp: type === 'rsvp' ? { ...RSVP_DEFAULT } : undefined,
       slides: type === 'slideshow' ? [
         { id: 's_1', url: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800', heading: 'Special Moment 1', description: 'Add your slide description here.' },
         { id: 's_2', url: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&q=80&w=800', heading: 'Special Moment 2', description: 'Add your slide description here.' }
@@ -971,9 +976,13 @@ body { margin: 0; background: ${config.pageBg || '#fefdfb'}; color: ${config.bod
 <script type="text/babel">
 const initialConfig = ${configJson};
 
+${GATEWAY_SOURCE}
+
 function App() {
   const [config] = React.useState(initialConfig);
-  const [isOpened, setIsOpened] = React.useState(false);
+  const gatewayOn = !!(initialConfig.gateway && initialConfig.gateway !== 'none');
+  const [isOpened, setIsOpened] = React.useState(!gatewayOn);
+  const [gateDone, setGateDone] = React.useState(!gatewayOn);
   const [isPlayingMusic, setIsPlayingMusic] = React.useState(false);
   const [comments, setComments] = React.useState(config.comments || []);
   const [rsvps, setRsvps] = React.useState(config.rsvpResponses || []);
@@ -1028,12 +1037,7 @@ function App() {
     if (config.music) {
       toggleMusic();
     }
-    setTimeout(() => {
-      const page2 = document.getElementById('page-2');
-      if (page2) {
-        page2.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 80);
+    window.scrollTo(0, 0);
   };
 
   const handleAiBlessing = () => {
@@ -1091,6 +1095,22 @@ function App() {
 
   return (
     <div className={"relative select-none " + (isOpened ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden")} style={{ overflowY: isOpened ? 'auto' : 'hidden', touchAction: isOpened ? 'auto' : 'none', backgroundColor: config.pageBg || '#fefdfb', backgroundImage: config.bgImage ? ("url(" + config.bgImage + ")") : undefined, backgroundSize: 'cover', backgroundPosition: 'center', color: config.bodyText || '#4a5568' }}>
+      {!gateDone && gatewayOn && (
+        <GatewayScene
+          effect={config.gateway}
+          buttonText={config.coverText}
+          accent={config.coverAccent || config.accent}
+          bg={config.coverBg}
+          eyebrow={config.eyebrow}
+          title={config.title}
+          tagline={config.tagline}
+          dateText={config.dateText}
+          position="fixed"
+          onStart={handleOpen}
+          onDone={() => setGateDone(true)}
+        />
+      )}
+
       {/* Floating Music Button */}
       {config.music && (
         <button onClick={toggleMusic} className="fixed top-4 right-4 z-40 bg-white/95 backdrop-blur border border-[#ebdcd0] px-4 py-2.5 rounded-full shadow-lg text-[#bc6c25] hover:scale-105 transition-all text-xs font-semibold">
@@ -1102,7 +1122,8 @@ function App() {
       <div className="max-w-2xl mx-auto">
         {(config.blocks || []).map((block, idx) => {
           if (block.enabled === false) return null;
-          if (idx > 0 && !isOpened) return null;
+          if (!isOpened) return null;
+          if (block.type === 'blessings_wall' || block.type === 'comments') return null;
           if (idx === 0) {
             return (
               <section key={block.id || idx} id="page-1" className="min-h-screen flex flex-col justify-between items-center text-center p-6 md:p-10 relative">
@@ -1134,14 +1155,6 @@ function App() {
                   )}
                 </div>
 
-                <div className="pt-4 pb-8 w-full flex flex-col items-center gap-2">
-                  <button onClick={handleOpen} className="px-8 py-3.5 rounded-full text-white font-bold text-sm shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2" style={{ backgroundColor: accentColor }}>
-                    <span>✉️</span>
-                    <span>{config.coverText || 'Tap to open'}</span>
-                    <span>↓</span>
-                  </button>
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Tap to open · Unfold celebration details</span>
-                </div>
               </section>
             );
           }
@@ -1157,10 +1170,10 @@ function App() {
                 </div>
               )}
             <h2 className={\`text-3xl md:text-4xl \${fonts.heading}\`} style={{ color: accentColor }}>{block.heading}</h2>
-            {block.image && block.type !== 'slideshow' && (
+            {block.image && block.type !== 'slideshow' && block.type !== 'rsvp' && (
               <img src={block.image} alt={block.heading} className="w-full max-w-md mx-auto h-64 object-cover rounded-2xl shadow-md border-2 border-[#ebdcd0]" />
             )}
-            {block.detailsHeading && (
+            {block.detailsHeading && block.type !== 'rsvp' && (
               <h3 className="text-lg font-serif text-[#bc6c25] font-semibold">{block.detailsHeading}</h3>
             )}
 
@@ -1186,73 +1199,9 @@ function App() {
                   </div>
                 ))}
               </div>
-            ) : block.type === 'blessings_wall' ? (
-              <div className="space-y-4 max-w-md mx-auto text-left">
-                <form onSubmit={e => { e.preventDefault(); if(!commentName.trim() || !commentMsg.trim())return; setComments([{id:'c_'+Date.now(), name:commentName, message:commentMsg, date:'Just now'}, ...comments]); setCommentName(''); setCommentMsg(''); }} className="bg-[#fcf8f5] p-4 rounded-2xl space-y-3 border border-[#ebdcd0]">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-[#bc6c25]">Post Your Blessings (Any Indian Language / किसी भी भारतीय भाषा में)</div>
-                    <button type="button" onClick={handleAiBlessing} className="text-[11px] bg-[#faedcd] hover:bg-[#ebdcd0] text-[#bc6c25] px-2.5 py-1 rounded-lg font-bold">✨ AI Auto-Blessing</button>
-                  </div>
-                  <input type="text" placeholder="Your Name (आपका नाम / ਨਾਮ)" value={commentName} onChange={e=>setCommentName(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none" required />
-                  <textarea rows={3} placeholder="Click 'AI Auto-Blessing' or type your blessing..." value={commentMsg} onChange={e=>setCommentMsg(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none" required />
-                  <button type="submit" className="w-full py-2.5 bg-[#d4a373] text-white font-bold rounded-xl text-xs">Post Blessing / आशीर्वाद भेजें ✨</button>
-                </form>
-                <div className="bg-white border border-[#ebdcd0] p-4 rounded-2xl space-y-3 max-h-72 overflow-y-auto">
-                  <div className="text-xs font-semibold text-[#bc6c25]">Blessings Wall ({comments.length})</div>
-                  {comments.length === 0 ? (
-                    <div className="text-xs text-slate-400 text-center py-4">No blessings posted yet.</div>
-                  ) : (
-                    comments.map(c => (
-                      <div key={c.id} className="bg-[#fcf8f5] border border-[#ebdcd0] p-3 rounded-xl text-xs space-y-1">
-                        <div className="flex justify-between font-semibold text-[#bc6c25]">
-                          <span>{c.name}</span>
-                          <span className="text-[10px] text-slate-400">{c.date}</span>
-                        </div>
-                        <p className="text-slate-800 text-sm font-sans">{c.message}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : block.type === 'comments' ? (
-              <div className="space-y-4 text-left">
-                <form onSubmit={e => { e.preventDefault(); if(!commentName.trim() || !commentMsg.trim())return; setComments([{id:'c_'+Date.now(), name:commentName, message:commentMsg, date:'Just now'}, ...comments]); setCommentName(''); setCommentMsg(''); }} className="bg-[#fcf8f5] p-4 rounded-2xl space-y-3 border border-[#ebdcd0]">
-                  <div className="text-xs font-semibold text-[#bc6c25]">Leave Your Blessings</div>
-                  <input type="text" placeholder="Your Name" value={commentName} onChange={e=>setCommentName(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none" required />
-                  <textarea rows={2} placeholder="Warm wishes..." value={commentMsg} onChange={e=>setCommentMsg(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none" required />
-                  <button type="submit" className="w-full py-2 bg-[#d4a373] text-white font-bold rounded-xl text-xs">Post Wish ✨</button>
-                </form>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {comments.map(c => (
-                    <div key={c.id} className="bg-white border border-[#ebdcd0] p-3 rounded-xl text-xs">
-                      <span className="font-semibold text-[#bc6c25]">{c.name}:</span> <span className="text-slate-700">{c.message}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             ) : block.type === 'rsvp' ? (
-              <div className="space-y-4 text-left">
-                <form onSubmit={e => { e.preventDefault(); if(!rsvpName.trim())return; setRsvps([{id:'r_'+Date.now(), name:rsvpName, email:rsvpEmail, status:rsvpStatus, guestsCount:rsvpGuestsCount, message:rsvpMsg, date:'Just now'}, ...rsvps]); setRsvpName(''); setRsvpEmail(''); setRsvpMsg(''); setRsvpSubmitted(true); setTimeout(()=>setRsvpSubmitted(false), 4000); }} className="bg-[#fcf8f5] p-4 rounded-2xl space-y-3 border border-[#ebdcd0]">
-                  <div className="text-xs font-semibold text-[#bc6c25]">RSVP Response</div>
-                  {rsvpSubmitted && <div className="p-2 bg-emerald-100 text-emerald-800 text-xs rounded-xl text-center font-medium">Thank you! RSVP recorded successfully. ✨</div>}
-                  <input type="text" placeholder="Your Full Name *" value={rsvpName} onChange={e=>setRsvpName(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none" required />
-                  <div className="grid grid-cols-2 gap-2">
-                    <select value={rsvpStatus} onChange={e=>setRsvpStatus(e.target.value)} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none">
-                      <option value="attending">Accepts 🥂</option>
-                      <option value="regrets">Regrets 💌</option>
-                      <option value="maybe">Maybe 🤔</option>
-                    </select>
-                    <select value={rsvpGuestsCount} onChange={e=>setRsvpGuestsCount(Number(e.target.value))} className="w-full bg-white border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs outline-none">
-                      <option value={1}>1 Guest</option>
-                      <option value={2}>2 Guests</option>
-                      <option value={3}>3 Guests</option>
-                      <option value={4}>4+ Guests</option>
-                    </select>
-                  </div>
-                  <button type="submit" className="w-full py-2.5 bg-[#d4a373] text-white font-bold rounded-xl text-xs">Submit RSVP</button>
-                </form>
-              </div>
-            ) : (
+              <RsvpCard data={block.rsvp} accent={accentColor} />
+) : (
               <div className={\`space-y-2 max-w-md mx-auto \${fonts.body}\`}>
                 {(block.lines || []).map((line, lIdx) => (
                   <p key={lIdx}>{line}</p>
@@ -1270,9 +1219,11 @@ function App() {
       </div>
 
       {/* Floating button to jump back to Page 1 / Hero */}
-      <button onClick={() => { const p1 = document.getElementById('page-1'); if(p1) p1.scrollIntoView({ behavior: 'smooth' }); }} className="fixed bottom-4 left-4 z-40 bg-white/95 backdrop-blur border border-[#ebdcd0] px-3.5 py-2 rounded-full shadow-lg text-xs font-semibold text-[#bc6c25] hover:bg-[#fcf8f5] transition-all">
-        ↑ Page 1 (Hero)
-      </button>
+      {gateDone && (
+        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="fixed bottom-4 left-4 z-40 bg-white/95 backdrop-blur border border-[#ebdcd0] px-3.5 py-2 rounded-full shadow-lg text-xs font-semibold text-[#bc6c25]">
+          ↑ Top
+        </button>
+      )}
     </div>
   );
 }
@@ -1582,18 +1533,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 
                   <div className="pt-2 border-t border-[#ebdcd0] space-y-4">
                     <h3 className="text-xs font-semibold text-[#bc6c25] uppercase tracking-wider">Main Title & Banner</h3>
-                    <div>
-                      <label className="block text-xs text-slate-600 mb-1">Cover / Envelope Opening View</label>
-                      <select
-                        value={config.cover || 'envelope'}
-                        onChange={e => setConfig({ ...config, cover: e.target.value as any })}
-                        className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3.5 py-2 text-xs text-[#2d3748] outline-none font-medium"
+                    <div className="space-y-2 p-3 bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl">
+                      <div className="text-xs font-semibold text-[#bc6c25]">Page 1 Gateway (opening transition)</div>
+                      <p className="text-[10px] text-slate-500">Every card has 2 pages: Page 1 is this locked gateway with a tap button. Page 2 is your full card.</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {GW_EFFECTS.map(fx => (
+                          <button
+                            key={fx.key}
+                            onClick={() => { setConfig({ ...config, gateway: fx.key }); setIsOpened(false); setActiveTab('preview'); }}
+                            className={`py-2 px-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${(config.gateway || 'double_gate') === fx.key ? 'bg-[#faedcd] border-[#d4a373] text-[#bc6c25]' : 'bg-white border-[#ebdcd0] text-slate-600'}`}
+                          >
+                            <span className="text-base">{fx.emoji}</span> {fx.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => { setIsOpened(false); setActiveTab('preview'); }}
+                        className="w-full py-2 bg-[#d4a373] hover:bg-[#bc6c25] text-white rounded-xl text-xs font-bold"
                       >
-                        <option value="envelope">✉️ Envelope Cover (Tap to Open)</option>
-                        <option value="curtain">🎭 Curtain Reveal</option>
-                        <option value="gate">🏛️ Grand Gate</option>
-                        <option value="none">None (Direct Hero Page)</option>
-                      </select>
+                        ▶ Preview this transition
+                      </button>
                     </div>
                     <div>
                       <label className="block text-xs text-slate-600 mb-1">Invitation Title / Names</label>
@@ -1975,17 +1934,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                     <button onClick={() => addBlock('slideshow')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0] font-semibold">
                       + Slideshow
                     </button>
-                    <button onClick={() => addBlock('blessings_wall')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0] font-semibold">
-                      + Blessings Wall
-                    </button>
                     <button onClick={() => addBlock('event_room')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0]">
                       + Room Event
                     </button>
                     <button onClick={() => addBlock('venue')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0]">
                       + Venue Map
                     </button>
-                    <button onClick={() => addBlock('comments')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0]">
-                      + Comments
+                    <button onClick={() => addBlock('rsvp')} className="py-1 px-2 text-[11px] bg-white hover:bg-[#f4ece4] text-[#bc6c25] rounded-lg border border-[#ebdcd0]">
+                      + RSVP Button
                     </button>
                   </div>
 
@@ -1995,7 +1951,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                     <div className="space-y-0.5">
                       <span className="font-bold text-[#bc6c25]">2-Page Invitation Architecture</span>
                       <p className="text-[11px] text-slate-600 leading-relaxed">
-                        <strong>Page 1</strong> is your dedicated <strong>Hero Page</strong> featuring your portrait, title, and interactive <strong>"Tap to open"</strong> action. When tapped, it smoothly unfolds into <strong>Page 2</strong> followed by all subsequent pages in vertical scrolling.
+                        <strong>Page 1</strong> is the locked <strong>Gateway</strong> (pick the transition in the Style tab) with a <strong>"Tap to open"</strong> button. When tapped, it opens into <strong>Page 2</strong>: your full card, from the main page below down to the last page.
                       </p>
                     </div>
                   </div>
@@ -2011,7 +1967,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                               idx === 1 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs' :
                               'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}>
-                              {idx === 0 ? '👑 Page 1 · Hero' : idx === 1 ? '📄 Page 2' : `Page ${idx + 1}`}
+                              {idx === 0 ? '👑 Main Page (Page 2 starts here)' : `Section ${idx + 1}`}
                             </span>
                             <span className="text-[11px] font-semibold text-slate-500 capitalize">({block.type})</span>
                             <input
@@ -2081,6 +2037,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                           </div>
                         </div>
 
+                        {block.type !== 'rsvp' && (<>
                         {/* Element On-Off Settings */}
                         <div className="flex items-center gap-4 text-[11px] bg-white border border-[#ebdcd0] px-3 py-1.5 rounded-xl text-slate-600">
                           <span className="font-semibold text-[#bc6c25]">Elements:</span>
@@ -2115,6 +2072,44 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                             className="w-full bg-white border border-[#ebdcd0] rounded-lg px-3 py-1.5 text-xs text-[#2d3748] outline-none"
                           />
                         </div>
+
+                        </>)}
+
+                        {/* R.S.V.P. card builder */}
+                        {block.type === 'rsvp' && (() => {
+                          const r = { ...RSVP_DEFAULT, ...(block.rsvp || {}) };
+                          const setR = (patch: any) => updateBlock(block.id, { rsvp: { ...r, ...patch } });
+                          const inp = "w-full bg-white border border-[#ebdcd0] rounded-lg px-3 py-1.5 text-xs text-[#2d3748] outline-none";
+                          const lab = "block text-[10px] text-slate-500 mb-1";
+                          return (
+                            <div className="space-y-3 pt-2 border-t border-[#ebdcd0]">
+                              <span className="text-xs font-semibold text-[#bc6c25]">R.S.V.P. Card Text</span>
+                              <div><label className={lab}>Opening line</label>
+                                <input type="text" value={r.regards} onChange={e => setR({ regards: e.target.value })} className={inp} /></div>
+                              <div><label className={lab}>Grandparents / Family Elders (one per line)</label>
+                                <textarea rows={2} value={(r.elders || []).join('\n')} onChange={e => setR({ elders: e.target.value.split('\n') })} className={inp} /></div>
+                              <div><label className={lab}>Parents (one per line)</label>
+                                <textarea rows={2} value={(r.parents || []).join('\n')} onChange={e => setR({ parents: e.target.value.split('\n') })} className={inp} /></div>
+                              <div><label className={lab}>Closing line</label>
+                                <input type="text" value={r.allLine} onChange={e => setR({ allLine: e.target.value })} className={inp} /></div>
+                              <div><label className={lab}>Contacts label</label>
+                                <input type="text" value={r.awaitLabel} onChange={e => setR({ awaitLabel: e.target.value })} className={inp} /></div>
+                              <div className="space-y-2">
+                                <label className={lab}>Contact people ({(r.contacts || []).length})</label>
+                                {(r.contacts || []).map((c: any, ci: number) => (
+                                  <div key={c.id || ci} className="flex gap-1.5 items-center">
+                                    <input type="text" placeholder="Name" value={c.name} onChange={e => setR({ contacts: r.contacts.map((x: any, xi: number) => xi === ci ? { ...x, name: e.target.value } : x) })} className={inp + ' flex-1 min-w-0'} />
+                                    <input type="text" placeholder="+91 98765 43210" value={c.phone} onChange={e => setR({ contacts: r.contacts.map((x: any, xi: number) => xi === ci ? { ...x, phone: e.target.value } : x) })} className={inp + ' flex-1 min-w-0'} />
+                                    <button onClick={() => setR({ contacts: r.contacts.filter((_: any, xi: number) => xi !== ci) })} className="px-2 py-1.5 text-rose-600 border border-rose-200 rounded-lg bg-white" title="Remove"><Trash2 className="w-3 h-3" /></button>
+                                  </div>
+                                ))}
+                                <button onClick={() => setR({ contacts: [...(r.contacts || []), { id: 'c_' + Date.now(), name: '', phone: '' }] })} className="w-full py-1.5 text-[11px] font-semibold text-[#bc6c25] bg-white border border-dashed border-[#d4a373] rounded-lg">+ Add contact</button>
+                              </div>
+                              <div><label className={lab}>Note at the bottom (put your date here)</label>
+                                <textarea rows={3} value={r.note} onChange={e => setR({ note: e.target.value })} className={inp} /></div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Slideshow Specific Builder (Unlimited Slides, Headings & Descriptions) */}
                         {block.type === 'slideshow' && (
@@ -2227,7 +2222,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                         )}
 
                         {/* Image & Size (if not comments or slideshow) */}
-                        {block.type !== 'comments' && block.type !== 'slideshow' && (
+                        {block.type !== 'comments' && block.type !== 'slideshow' && block.type !== 'rsvp' && (
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <div className="flex items-center justify-between mb-1">
@@ -2262,7 +2257,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
                         )}
 
                         {/* Lines Editor (if not slideshow) */}
-                        {block.type !== 'slideshow' && (
+                        {block.type !== 'slideshow' && block.type !== 'rsvp' && (
                           <div className="space-y-1.5">
                             <label className="block text-[10px] text-slate-500">Detail Lines</label>
                             {block.lines.map((line, lIdx) => (
@@ -2845,6 +2840,10 @@ function LiveInvitationRenderer({
 }) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
   const [flowerShower, setFlowerShower] = useState(false);
+  const gatewayOn = !!initialConfig.gateway && initialConfig.gateway !== 'none';
+  const [gate, setGate] = useState<'closed' | 'opening' | 'open'>(gatewayOn ? 'closed' : 'open');
+  useEffect(() => { if (isOpened === false && gatewayOn) setGate('closed'); }, [isOpened]);
+  useEffect(() => { if (!gatewayOn) setGate('open'); }, [gatewayOn]);
   const [isOpening, setIsOpening] = useState(false);
   const [commentName, setCommentName] = useState('');
   const [commentMsg, setCommentMsg] = useState('');
@@ -3117,6 +3116,8 @@ function LiveInvitationRenderer({
       onContextMenu={e => e.preventDefault()}
       className="w-full h-full overflow-y-auto relative select-none scroll-smooth"
       style={{
+        overflowY: gate === 'closed' ? 'hidden' : undefined,
+        touchAction: gate === 'closed' ? 'none' : undefined,
         backgroundColor: config.pageBg || '#fefdfb',
         backgroundImage: config.bgImage ? `url(${config.bgImage})` : undefined,
         backgroundSize: 'cover',
@@ -3125,6 +3126,28 @@ function LiveInvitationRenderer({
         fontFamily: customFontFamily ? customFontFamily : undefined
       }}
     >
+      {gate !== 'open' && gatewayOn && (
+        <GatewayScene
+          key={initialConfig.gateway}
+          effect={initialConfig.gateway}
+          buttonText={initialConfig.coverText}
+          accent={initialConfig.coverAccent || initialConfig.accent}
+          bg={initialConfig.coverBg}
+          eyebrow={initialConfig.eyebrow}
+          title={initialConfig.title}
+          tagline={initialConfig.tagline}
+          dateText={initialConfig.dateText}
+          position="absolute"
+          onStart={() => {
+            setGate('opening');
+            setIsOpened(true);
+            if (onOpen) onOpen();
+            const c = containerRef.current;
+            if (c) c.scrollTop = 0;
+          }}
+          onDone={() => setGate('open')}
+        />
+      )}
 
       {/* Floating Indian Language Translation Dropdown */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
@@ -3211,8 +3234,9 @@ function LiveInvitationRenderer({
       </div>
 
       {/* Render Modular Blocks: Page 1 (Hero) -> Page 2 -> Followed by rest of pages in vertical scrolling */}
-      {(!isOpened && config.cover && config.cover !== 'none') ? null : (config.blocks || DEFAULT_BLOCKS).map((block, index) => {
+      {gate === 'closed' ? null : (config.blocks || DEFAULT_BLOCKS).map((block, index) => {
         if (block.enabled === false) return null;
+        if (block.type === 'blessings_wall' || block.type === 'comments') return null;
         const blockAnim = block.anim || config.sectionAnim || 'slide_up';
         const isHeroPage = index === 0;
         const isPageTwo = index === 1;
@@ -3306,7 +3330,7 @@ function LiveInvitationRenderer({
             </h2>
 
             {/* Optional Image with adjustable size */}
-            {block.image && block.type !== 'slideshow' && block.showImage !== false && (
+            {block.image && block.type !== 'slideshow' && block.type !== 'rsvp' && block.showImage !== false && (
               <div className="my-4">
                 <img
                   src={block.image}
@@ -3317,7 +3341,7 @@ function LiveInvitationRenderer({
             )}
 
             {/* Details Heading */}
-            {block.detailsHeading && block.showDetails !== false && (
+            {block.detailsHeading && block.type !== 'rsvp' && block.showDetails !== false && (
               <h3 className="text-lg font-serif text-[#bc6c25] tracking-wide font-semibold">
                 {t(block.detailsHeading, block.detailsHeadingSecondary)}
               </h3>
@@ -3412,125 +3436,7 @@ function LiveInvitationRenderer({
             {/* Slideshow Block */}
             {block.type === 'slideshow' ? (
               <SlideshowCarousel slides={block.slides || []} />
-            ) : block.type === 'blessings_wall' ? (
-              <div className="space-y-4 max-w-md mx-auto text-left">
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    if (!commentName.trim() || !commentMsg.trim()) return;
-                    onAddComment({
-                      id: 'c_' + Date.now(),
-                      name: commentName.trim(),
-                      message: commentMsg.trim(),
-                      date: 'Just now'
-                    });
-                    setCommentName('');
-                    setCommentMsg('');
-                  }}
-                  className="bg-white/95 border border-[#ebdcd0] p-4 rounded-2xl space-y-3 shadow-md"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-[#bc6c25]">Post Your Blessings (Any Indian Language / किसी भी भारतीय भाषा में)</div>
-                    <button
-                      type="button"
-                      onClick={handleAiBlessing}
-                      className="text-[11px] bg-[#faedcd] hover:bg-[#ebdcd0] text-[#bc6c25] px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-all shadow-sm"
-                    >
-                      ✨ AI Auto-Blessing
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Your Name (आपका नाम / ਨਾਮ)"
-                    value={commentName}
-                    onChange={e => setCommentName(e.target.value)}
-                    className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                  />
-                  <textarea
-                    rows={3}
-                    placeholder="Write your blessing in Hindi, Punjabi, Tamil, Telugu, Bengali, Marathi, etc. (अपनी शुभकामनाएँ लिखें...)"
-                    value={commentMsg}
-                    onChange={e => setCommentMsg(e.target.value)}
-                    className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-gradient-to-r from-[#d4a373] to-[#bc6c25] hover:opacity-95 text-white font-bold rounded-xl text-xs transition-all shadow"
-                  >
-                    Post Blessing / आशीर्वाद भेजें ✨
-                  </button>
-                </form>
-
-                <div className="bg-white/80 border border-[#ebdcd0] p-4 rounded-2xl space-y-3 max-h-72 overflow-y-auto">
-                  <div className="text-xs font-semibold text-[#bc6c25]">Blessings Wall / शुभकामनाएं दीवार ({config.comments.length})</div>
-                  {config.comments.length === 0 ? (
-                    <div className="text-xs text-slate-400 text-center py-4">No blessings posted yet. Be the first to share your blessing!</div>
-                  ) : (
-                    config.comments.map(c => (
-                      <div key={c.id} className="bg-white border border-[#ebdcd0] p-3 rounded-xl text-xs space-y-1.5 shadow-sm">
-                        <div className="flex items-center justify-between text-[#bc6c25] font-semibold">
-                          <span className="text-sm font-medium">{c.name}</span>
-                          <span className="text-[10px] text-slate-400 font-normal">{c.date}</span>
-                        </div>
-                        <p className="text-slate-800 text-sm leading-relaxed font-sans">{c.message}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : block.type === 'comments' ? (
-              <div className="space-y-4 max-w-md mx-auto text-left">
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    if (!commentName.trim() || !commentMsg.trim()) return;
-                    onAddComment({
-                      id: 'c_' + Date.now(),
-                      name: commentName.trim(),
-                      message: commentMsg.trim(),
-                      date: 'Just now'
-                    });
-                    setCommentName('');
-                    setCommentMsg('');
-                  }}
-                  className="bg-white/90 border border-[#ebdcd0] p-4 rounded-2xl space-y-3 shadow-md"
-                >
-                  <div className="text-xs font-semibold text-[#bc6c25]">Send Your Blessings</div>
-                  <input
-                    type="text"
-                    placeholder="Your Name"
-                    value={commentName}
-                    onChange={e => setCommentName(e.target.value)}
-                    className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                  />
-                  <textarea
-                    rows={2}
-                    placeholder="Your warm wishes for the couple..."
-                    value={commentMsg}
-                    onChange={e => setCommentMsg(e.target.value)}
-                    className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-[#d4a373] hover:bg-[#bc6c25] text-white font-bold rounded-xl text-xs transition-all shadow"
-                  >
-                    Post Wish ✨
-                  </button>
-                </form>
-
-                <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-                  {config.comments.map(c => (
-                    <div key={c.id} className="bg-white/80 border border-[#ebdcd0] p-3 rounded-xl text-xs space-y-1 shadow-sm">
-                      <div className="flex items-center justify-between text-[#bc6c25] font-semibold">
-                        <span>{c.name}</span>
-                        <span className="text-[10px] text-slate-400 font-normal">{c.date}</span>
-                      </div>
-                      <p className="text-slate-700">{c.message}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
+            ) : block.type === 'rsvp' ? null : (
               <div className={`space-y-2 max-w-md mx-auto leading-relaxed opacity-95 ${fonts.body}`}>
                 {tLines(block.lines, block.linesSecondary).map((line, lIdx) => (
                   <p key={lIdx}>{line}</p>
@@ -3561,144 +3467,9 @@ function LiveInvitationRenderer({
               </div>
             )}
 
-            {/* Interactive RSVP Status Form */}
+            {/* Predefined-guest RSVP (reply goes to host on WhatsApp) */}
             {block.type === 'rsvp' && (
-              <div className="space-y-4 max-w-md mx-auto text-left pt-2">
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    if (!rsvpName.trim()) return;
-                    onAddRsvp({
-                      id: 'r_' + Date.now(),
-                      name: rsvpName.trim(),
-                      email: rsvpEmail.trim(),
-                      status: rsvpStatus,
-                      guestsCount: rsvpGuestsCount,
-                      message: rsvpMsg.trim(),
-                      date: 'Just now'
-                    });
-                    setRsvpName('');
-                    setRsvpEmail('');
-                    setRsvpMsg('');
-                    setRsvpSubmitted(true);
-                    setTimeout(() => setRsvpSubmitted(false), 4000);
-                  }}
-                  className="bg-white/95 border border-[#ebdcd0] p-4 rounded-2xl space-y-3 shadow-md"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-semibold text-[#bc6c25]">Interactive RSVP Status</div>
-                    <span className="text-[10px] bg-[#faedcd] text-[#bc6c25] px-2 py-0.5 rounded-full font-bold">
-                      {(config.rsvpResponses || []).filter(r => r.status === 'attending').length} Attending
-                    </span>
-                  </div>
-                  {rsvpSubmitted && (
-                    <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl text-center font-medium animate-fadeIn">
-                      Thank you! Your RSVP has been recorded successfully. ✨
-                    </div>
-                  )}
-                  {initialConfig.predefinedGuests && initialConfig.predefinedGuests.length > 0 && (
-                    <div>
-                      <label className="block text-[10px] text-slate-500 mb-1">Select from Guest List (Optional)</label>
-                      <select
-                        onChange={e => {
-                          const gId = e.target.value;
-                          const found = initialConfig.predefinedGuests.find(g => g.id === gId);
-                          if (found) {
-                            setRsvpName(found.name);
-                            setRsvpEmail(found.contact);
-                          }
-                        }}
-                        className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                      >
-                        <option value="">-- Choose your name from guest list --</option>
-                        {initialConfig.predefinedGuests.map(g => (
-                          <option key={g.id} value={g.id}>{g.name} ({g.relationship})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-1">Your Full Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Priya Sharma"
-                      value={rsvpName}
-                      onChange={e => setRsvpName(e.target.value)}
-                      required
-                      className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] text-slate-500 mb-1">Will you attend?</label>
-                      <select
-                        value={rsvpStatus}
-                        onChange={e => setRsvpStatus(e.target.value as any)}
-                        className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                      >
-                        <option value="attending">Accepts with Pleasure 🥂</option>
-                        <option value="regrets">Declines with Regrets 💌</option>
-                        <option value="maybe">Might Attend 🤔</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-slate-500 mb-1">Guests Count</label>
-                      <select
-                        value={rsvpGuestsCount}
-                        onChange={e => setRsvpGuestsCount(parseInt(e.target.value))}
-                        className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                      >
-                        <option value={1}>1 Guest</option>
-                        <option value={2}>2 Guests</option>
-                        <option value={3}>3 Guests</option>
-                        <option value={4}>4+ Guests</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-500 mb-1">Dietary Requirements / Note</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Vegetarian, Allergic to nuts..."
-                      value={rsvpMsg}
-                      onChange={e => setRsvpMsg(e.target.value)}
-                      className="w-full bg-[#fcf8f5] border border-[#ebdcd0] rounded-xl px-3 py-2 text-xs text-[#2d3748] outline-none focus:border-[#d4a373]"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#d4a373] hover:bg-[#bc6c25] text-white font-bold rounded-xl text-xs transition-all shadow flex items-center justify-center gap-1.5"
-                  >
-                    <Heart className="w-3.5 h-3.5 fill-white/30" /> Submit RSVP
-                  </button>
-                  {config.rsvpUrl && (
-                    <div className="text-center pt-1">
-                      <a href={config.rsvpUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#bc6c25] hover:underline">
-                        Or open external RSVP Form →
-                      </a>
-                    </div>
-                  )}
-                </form>
-
-                {/* RSVP Guest Responses List */}
-                <div className="bg-white/80 border border-[#ebdcd0] p-3 rounded-2xl space-y-2 max-h-48 overflow-y-auto">
-                  <div className="text-[11px] font-semibold text-[#bc6c25] px-1">Recent RSVP Responses ({(config.rsvpResponses || []).length})</div>
-                  {(config.rsvpResponses || []).map(r => (
-                    <div key={r.id} className="bg-white border border-[#ebdcd0] p-2.5 rounded-xl text-xs flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-[#2d3748]">{r.name}</div>
-                        <div className="text-[10px] text-slate-500">{r.message || 'No note'} · {r.guestsCount} guest(s)</div>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        r.status === 'attending' ? 'bg-emerald-100 text-emerald-800' :
-                        r.status === 'regrets' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {r.status === 'attending' ? 'Attending' : r.status === 'regrets' ? 'Regrets' : 'Maybe'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <RsvpCard data={block.rsvp} accent={accentColor} />
             )}
 
             {/* Separator */}
@@ -3716,16 +3487,14 @@ function LiveInvitationRenderer({
       {showScrollToTop && (
         <button
           onClick={() => {
-            const p1 = document.getElementById('page-1') || containerRef.current;
-            if (p1) {
-              p1.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            const c = containerRef.current;
+            if (c) c.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           className="fixed bottom-4 left-4 z-40 bg-white/95 backdrop-blur-md border border-[#ebdcd0] px-3.5 py-2 rounded-full shadow-lg text-xs font-semibold text-[#bc6c25] hover:bg-[#fcf8f5] transition-all flex items-center gap-1.5 hover:scale-105 animate-fadeIn"
-          title="Scroll back to Page 1 (Hero)"
+          title="Scroll back to top"
         >
           <ArrowUp className="w-3.5 h-3.5" />
-          <span>Page 1 (Hero)</span>
+          <span>Back to top</span>
         </button>
       )}
     </div>
